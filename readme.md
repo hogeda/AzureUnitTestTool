@@ -190,4 +190,4 @@ A列にリソースのドットプロパティを記載し、1行目にリソー
 | properties.osProfile.adminUserName                | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A7),Sheet2!$C:$C) |
 | properties.networkProfile.networkInterfaces[0].id | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A8),Sheet2!$C:$C) |
 
-![](.\etc\readme_fig1.png)
+![](etc\readme_fig1.png)
