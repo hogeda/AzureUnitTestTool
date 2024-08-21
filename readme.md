@@ -6,6 +6,7 @@
 .
 ├── GetAzureResourceDotProperty.ps1
 ├── readme.md
+├── Azure単体試験データフォーマット.md
 ├── config/
 │   ├── EditResourcePropertiesOfConfigFile.ps1
 │   └── GetAzureResourceDotProperty.config.json

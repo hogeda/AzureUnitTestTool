@@ -1,0 +1,75 @@
+# 使い方
+
+## 注意事項
+
+- PowershellスクリプトはUTF8で保存しています。文字化けするときは一度メモ帳で開きコピーして、続いてPowershell_ISEで開いて貼り付けてください。
+- Powershellスクリプトで3項演算子を用いているため、Powershellバージョン 7.0 以上で動作します。お使いのPowershellのバージョンを確認するには、Powershellで$PSVersionTableと実行します。
+
+```Powershell
+$PSVersionTable
+# Name                           Value
+# ----                           -----
+# PSVersion                      7.4.4
+# PSEdition                      Core
+# GitCommitId                    7.4.4
+# OS                             Microsoft Windows 10.0.19045
+# Platform                       Win32NT
+# PSCompatibleVersions           {1.0, 2.0, 3.0, 4.0…}
+# PSRemotingProtocolVersion      2.3
+# SerializationVersion           1.1.0.1
+# WSManStackVersion              3.0
+```
+
+## サービスプリンシパルの作成
+
+Microsoft EntraIDに対するアプリケーション管理者、サブスクリプションに対するユーザーアクセス管理者を有するアカウントで以下のコマンドを実行します。
+画面に出力される、client_idとclient_secretはConfigファイルで用いるので控えてください。
+スクリプト内の`<TENANTID`>、`<SUBSCRIPTIONID`>は適切な値に置き換えてください。
+
+```Powershell
+# ログイン
+Connect-AzAccount -Tenant <TENANTID> -Subscription <SUBSCRIPTIONID>
+# サービスプリンシパル作成/サブスクリプションに対するReader(閲覧者)ロールの割り当て
+$sp = New-AzADServicePrincipal -DisplayName AzureUnitTestTool -Role Reader -Scope /subscriptions/<SUBSCRIPTIONID>
+Write-Output ("client_id: {0}`nclient_secret: {1}" -f $sp.AppId, $sp.PasswordCredentials.SecretText)
+```
+
+## 外部設定値の作成
+
+### 下準備
+
+configフォルダ配下の「GetAzureResourceDotProperty.config.json」ファイルを開きます。
+以下4つの値を埋めたら保存して閉じます。
+
+- authentication.tenantId
+- authentication.client_id
+- authentication.client_secret
+- subscriptionId
+
+### コンフィグファイル編集スクリプトの実行
+
+configフォルダ配下の「EditResourcePropertiesOfConfigFile.ps1」ファイルを実行します。
+
+- サブスクリプションで登録済みのリソースプロバイダーが表示されます。対象のリソースプロバイダーを複数選択可能です。
+
+![Select Resource Providers](etc/howto1.png)
+
+- 直前の操作で選択したリソースプロバイダーが提供するリソース種類が表示されます。対象のリソース種類を複数選択可能です。
+
+![Select Resource Type](etc/howto2.png)
+
+- 選択したリソースタイプの名前、それが提供する最新のAPIバージョン、それからサブスクリプション上に存在するリソースからドットプロパティのキーを抽出し、コンフィグファイルの「resourceProperties」を更新します。
+
+- スクリプトの実行が終了したら、コンフィグファイルを開き(config\GetAzureResourceDotProperty.config.json)、apiVersionやvisibleを適切に修正してください。
+
+- visibleについてはコメントアウト(//)をサポートしています。
+
+## ツールの実行
+
+ツールを実行することで、サブスクリプション上に存在するリソースの中から、コンフィグファイルに記載されているリソース種類のリソースプロパティをドットプロパティ形式で抽出し、CSVファイルとしてエクスポートします。
+ツールを実行するには、ルート直下の「GetAzureResourceDotProperty.ps1」を実行します。
+
+## 単体試験データの準備
+
+ルート直下にある「Azure単体試験データフォーマット.xltx」より、新規ファイルを作成してください。
+ツールの実行で得たCSVファイルをExcelに読み込み、関数を適切に修正します。
