@@ -1,194 +1,48 @@
 # Azureリソース設定値抜き出しツール
 
-## フォルダ構成
-
-<pre>
-.
-├── GetAzureResourceDotProperty.ps1
-├── readme.md
-├── Azure単体試験データフォーマット.md
-├── config/
-│   ├── EditResourcePropertiesOfConfigFile.ps1
-│   └── GetAzureResourceDotProperty.config.json
-└── module/
-    └── Common.psm1
-</pre>
-
 ## 概要
 
-- サービスプリンシパルがAzureリソースの設定値を取得し、ドットプロパティ形式でCSVファイルに設定値の情報を出力します。
-- Configファイルには、サービスプリンシパルの認証情報、設定値を抜き出す対象のサブスクリプション、設定値を抜き出す対象のリソースタイプを指摘してください
+Azureリソースの単体試験は予め設計していたプロパティに適切に値が設定されていることを確認するというものです。
+作成するリソースの数に比例して単体試験の負担が増えますが、こんなことに労力をかけたくはありません。
+クラウドサービスですので、ポータルの画面がプロジェクト期間の中で変更され、単体試験の手順見直しなんてこともあります。
+
+AzureはAzure Resource Managerというデプロイモデルで管理されており、その実態はリソースプロバイダーという名前空間が、
+リソースタイプのプロパティや振る舞いをAPIとして定義しています。
+リソースタイプに関する更新はAPIバージョンの更新であり、プロジェクト期間中同じAPIバージョンを叩いているのであれば、
+ポータル画面の変化に囚われず常に一貫した結果を得ることができます。
+
+本ツールでは、単体試験の対象とするリソースタイプと、それで用いるAPIバージョンをコンフィグファイルとして定義します。
+コンフィグの情報に基づいてサブスクリプション上のリソースのプロパティを抜き出すことを目的に作成しました。
+
+また単体試験はパラメータシートとの比較となりますが、パラメータシートはExcelで作成する機会が多いです。
+ExcelではJSONを取り扱いづらいので、リソースの情報はJSON構造をドットプロパティ形式に変換してCSVファイルとして出力します。
+それをExcelで読み込み、リソースIDとドットプロパティの組み合わせをキーとしてデータを探索することで、
+目的のプロパティの値を簡単に取得することを実現します。
+
+またリソースのプロパティを取得した際に、パラメータシートで定義していない項目がたくさん取れるかと思います。
+不要なデータは予めフィルターすることで処理時間の短縮につながるため、フィルター機能を有しています。
 
 ## 前提条件
 
-- サービスプリンシパルをMicrosoft Entra IDに作成してください
-- そのサービスプリンシパルに対してサブスクリプションのReader権限を割り当ててください
-- サービスプリンシパルの認証方式はシークレットにのみ対応しています
+- ツールによるAzureへの接続にはサービスプリンシパルを用います
+- サービスプリンシパルの認証方式はシークレットにのみ対応します
+  証明書認証方式はBearerトークンを取得するための、REST本文の作成が難解で断念しました
+- Powershellスクリプトの中で三項演算子を用いていますが、これはPSVersion 7.0以降でのみ有効です
+  Powershell 7.0以降でしか動作しないので、必要に応じてバージョンアップしてください
 
-## 使い方
+## ドットプロパティのフィルタ機能について
 
-### コンフィグファイルの作成
+コンフィグファイルにおいて、リソースタイプそれぞれに「visible」という項目が存在します。
+ここに記載されているドットプロパティのみを最終的にはCSVファイルとして出力するように実装しています。
+※なおvisibleが存在しない、存在するが何も値が入っていないという場合には、何もフィルターせずに全てを出力します。
+※何も出力するものがないということであれば、リソースタイプごとコンフィグファイルから削除してください
 
-- 以下を参考にしてコンフィグファイルを作成します。次の値を設定してください。
-    resourcePropertiesは空のままで構いません。
-  - authentication.tenantId
-  - authentication.client_id
-  - authentication.client_secret
-  - subscriptionId
+ドットプロパティには配列も含まれます。例えばNSGのセキュリティルールにおいては、securityRulesというオブジェクトの配列があり、
+その配列の要素として受信/送信の規則が存在しています。（securityRules[0].priority、securityRules[0].nameといった形で）
+配列のドットプロパティを記載する際には[]内のインデックスの数字を削除して記載してください
 
-```Json
-{
-  "authentication": {
-    "tenantId": "テナントID",
-    "client_id": "サービスプリンシパルのクライアントID",
-    "client_secret": "サービスプリンシパルのシークレット"
-  },
-  "subscriptionId": "サブスクリプションID",
-  "resourceProperties": []
-}
-```
+## コンフィグファイル作成の補助ツールについて
 
-- EditResourceProeprtiesOfConfigFile.ps1を実行します
-  - リソースプロバイダーの選択画面が起動するので、対象とするリソースプロバイダーを選択してください
-  - 続けてリソースタイプの選択画面が起動するので、対象とするリソースタイプを選択してください
-  - 実行が完了するとConfigファイルのresourcePropertiesに値がセットされています。必要に応じてapiVersionやvisibleを更新してください。※詳細は後述します
-  - visibleの削除についてはコメントアウト(//)でも大丈夫ですが、有効なJSON形式となるように、配列の末尾の項目であれば「,」を削除することを忘れないでください
-
-### ツールの実行
-
-コンフィグファイルの準備ができたら、ツール実行の前提条件が整いました。
-
-- GetAzureResourceDotProperty.ps1ファイルを実行します。
-  - 実行が完了すると同フォルダにCSVファイルが出力されます。
-
-## コンフィグファイルについて
-
-resourcePropertiesについて説明します。
-この項目には取得対象となるリソースタイプの情報を列挙します。
-| 項目       | 説明                                                                                              |
-| ---------- | ------------------------------------------------------------------------------------------------- |
-| type       | リソースタイプを指定します。RESOURCEPROVIDER/RESOURCETYPE形式で記載してください。                   |
-| apiVersion | 設定値取得のREST APIで用いるAPIバージョンを指定します。デフォルトでは最新のAPIバージョンが選択されています。                                             |
-| visible    | CSV出力時に含まれるドットプロパティの項目を指定します。配列の場合、インデックスは削除します。 |
-
-visibleについて補足します。たとえば仮想マシンリソースの設定値をREST APIでGETした時の結果は以下のようになりますが、作成しているパラメータシートの項目と比べて余計な情報が存在すると思います。（etagやtimecreated、provisioningState等）
-不要な項目であればエクスポートする際に除外しますので、出力すべきプロパティをvisibleに記載してください。
-
-```JSON
-{
-  "name": "vmname",
-  "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RESOURCEGROUP/providers/Microsoft.Compute/virtualMachines/vmname",
-  "type": "Microsoft.Compute/virtualMachines",
-  "location": "japaneast",
-  "properties": {
-    "hardwareProfile": {
-      "vmSize": "Standard_B2s"
-    },
-    "provisioningState": "Succeeded", //デプロイが成功したかはパラメータ管理しないので、単体試験不要
-    "vmId": "11111111-1111-1111-1111-111111111111",
-    "additionalCapabilities": {
-      "hibernationEnabled": false
-    },
-    "storageProfile": {
-      "imageReference": {
-        "publisher": "MicrosoftWindowsServer",
-        "offer": "WindowsServer",
-        "sku": "2022-datacenter",
-        "version": "latest",
-        "exactVersion": "20348.2529.240619"
-      },
-      "osDisk": {
-        "osType": "Windows",
-        "name": "vmname_OsDisk",
-        "createOption": "FromImage",
-        "caching": "ReadWrite",
-        "managedDisk": {
-          "storageAccountType": "Standard_LRS",
-          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RESOURCEGROUP/providers/Microsoft.Compute/disks/vmname_OsDisk"
-        },
-        "deleteOption": "Delete",
-        "diskSizeGB": 127
-      },
-      "dataDisks": []
-    },
-    "osProfile": {
-      "computerName": "vmname",
-      "adminUsername": "admin",
-      "windowsConfiguration": {
-        "provisionVMAgent": true,
-        "enableAutomaticUpdates": true,
-        "patchSettings": {
-          "patchMode": "AutomaticByOS",
-          "assessmentMode": "ImageDefault",
-          "enableHotpatching": false
-        }
-      },
-      "secrets": [],
-      "allowExtensionOperations": true,
-      "requireGuestProvisionSignal": true
-    },
-    "networkProfile": {
-      "networkInterfaces": [
-        {
-          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RESOURCEGROUP/providers/Microsoft.Network/networkInterfaces/nicname",
-          "properties": {
-            "deleteOption": "Detach"
-          }
-        }
-      ]
-    },
-    "diagnosticsProfile": {
-      "bootDiagnostics": {
-        "enabled": true
-      }
-    },
-    "timeCreated": "2024-07-03T04:33:58.9307087+00:00" // いつ作成されたかについても管理する必要なし
-  },
-  "etag": "\"93\"", // リソースの更新にまつわるetagも管理する必要なし
-  "resources": [ // 拡張機能リソースについては個別で管理するので、VMの試験として不要
-    {
-      "name": "MDE.Windows",
-      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RESOURCEGROUP/providers/Microsoft.Compute/virtualMachines/vmname/extensions/MDE.Windows",
-      "type": "Microsoft.Compute/virtualMachines/extensions",
-      "location": "japaneast",
-      "properties": {
-        "autoUpgradeMinorVersion": true,
-        "forceUpdateTag": "22222222-2222-2222-2222-222222222222",
-        "provisioningState": "Succeeded",
-        "publisher": "Microsoft.Azure.AzureDefenderForServers",
-        "type": "MDE.Windows",
-        "typeHandlerVersion": "1.0",
-        "settings": {
-          "azureResourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RESOURCEGROUP/providers/Microsoft.Compute/virtualMachines/vmname",
-          "forceReOnboarding": false,
-          "vNextEnabled": true,
-          "autoUpdate": true
-        }
-      }
-    }
-  ]
-}
-```
-
-## その後について
-
-出力されるCSVファイルはid,dotProperty,valueという構成です。
-このCSVファイルをExcelでインポートしてください。
-A列にリソースのドットプロパティを記載し、1行目にリソースIDを入力します。
-例えばリソースIDとドットプロパティをキーとして、XLOOKUP関数で値を拾ってくれば完成です。
-見栄えよくするのであれば、ドットプロパティの隣のセルにTEXTSPLIT()を用いて「.」で区切るようにしましょう。
-条件付き書式で直前の(一つ上のセル)と値が同じであれば、文字色をセル背景色と同じにすれば、それっぽくなります。
-※Excel上でのデータの取り扱いはもっといい方法があると思います。データ量多いので、例で示しているような配列式は推奨しません。
-
-| ドットプロパティ(仮想マシン)                      | リソースAのID                                                  |
-| ------------------------------------------------- | -------------------------------------------------------------- |
-| name                                              | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A1),Sheet2!$C:$C) |
-| type                                              | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A2),Sheet2!$C:$C) |
-| location                                          | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A3),Sheet2!$C:$C) |
-| properties.hardwareProfile.vmsize                 | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A4),Sheet2!$C:$C) |
-| properties.storageProfile.osDisk.osType           | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A5),Sheet2!$C:$C) |
-| properties.osProfile.computerName                 | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A6),Sheet2!$C:$C) |
-| properties.osProfile.adminUserName                | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A7),Sheet2!$C:$C) |
-| properties.networkProfile.networkInterfaces[0].id | =XLOOKUP(1,(Sheet2!$A:$A=B$1)*(Sheet2!$B:$B=$A8),Sheet2!$C:$C) |
-
-![](etc/readme_fig1.png)
+リソースタイプ毎にどのAPIバージョンを用いるか、どのプロパティを出力させるかを決めて作成するのは意外とハードルが高いので、
+コンフィグファイル作成の補助ツールを用意しています。
+これは選択したリソースタイプの最新のAPIバージョンをセットするとともに、選択したリソースタイプのリソースをサブスクリプションから適当に取得してきてそのリソースのドットプロパティの全てをvisibleにセットするというものです。
