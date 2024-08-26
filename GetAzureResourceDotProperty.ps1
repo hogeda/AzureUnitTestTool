@@ -54,13 +54,6 @@ Write-Log -Message "[Info]finish to convert ARM into dot notation"
 #endregion
 
 #region: Out File
-# dot notation
-<# 
-CVS 3 列に表示させるリソースID(resourceId)
-ResourceType, ResourceId→未実装
-----------------------------
-<resourceType>, <resourceId>
-#>
 Write-Log -Message "[Info]start to out files"
 if (!(Test-Path $outputFolderPath)) {
     New-Item -ItemType Directory -Path $outputFolderPath | Out-Null
