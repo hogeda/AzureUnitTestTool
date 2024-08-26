@@ -10,6 +10,82 @@ $global:headers = ""
 #endregion
 
 #region: function
+<#
+.SYNOPSIS
+    Resources Property変数の初期化
+.DESCRIPTION
+    引数で指定されたリソースプロバイダーの情報を元に、Resources Property変数を初期化する。
+.PARAMETER resourceProviders
+    リソースプロバイダーオブジェクトの配列
+.OUTPUTS
+    System.Collections.ArrayList: type,apiVersion,visibleの3つのキーを持ったDictionaryの配列
+.EXAMPLE
+    Initialize-ResourcesProperty -resourceProviders $resourceProviders
+#>
+function Initialize-ResourcesProperty {
+    param(
+        [object]$resourceProviders
+    )
+    $resourcesProperty = [System.Collections.ArrayList]::new()
+    foreach ($resourceProvider in $resourceProviders) {
+        $resourceProviderName = $resourceProvider.namespace
+        foreach ($resourceType in $resourceProvider.resourceTypes) {
+            $resourceTypeName = $resourceType.resourceType
+            # リソースタイプのapiVersionsがnullの場合はスキップする
+            if ([System.String]::IsNullOrEmpty($resourceType.apiVersions)) { continue }
+            $resourceProperty = [ordered]@{
+                type       = "{0}/{1}" -f $resourceProviderName, $resourceTypeName
+                apiVersion = ($resourceType.apiVersions | Sort-Object -Descending)[0]
+                visible    = [System.Collections.ArrayList]::new()
+            }
+            $resourcesProperty.Add($resourceProperty) | Out-Null
+        }
+    }
+    return $resourcesProperty
+}
+
+<#
+.SYNOPSIS
+    WindowsFormでリソースプロバイダー、リソースタイプをユーザーに選択させて、resourcesProperty変数を更新する。
+.DESCRIPTION
+    引数で渡されたresourcesPropertyのtypeを元に、リソースプロバイダーをユーザーに選択させる。
+    選択されたリソースプロバイダーが提供するリソースタイプをユーザーに選択させる。
+    選択されたリソースタイプのみのresourcesPropertyを返却する。
+.PARAMETER resourcesProperty
+    コンフィグファイルのresourcesProperty部分の変数
+.OUTPUTS
+    System.Collections.ArrayList: type,apiVersion,visibleの3つのキーを持ったDictionaryの配列
+.EXAMPLE
+    Edit-ResourcesProperty -resourcesProperty $resourcesProperty
+#>
+function Edit-ResourcesProperty {
+    param (
+        [System.Collections.ArrayList]$resourcesProperty
+    )
+    $resourceProviderNames = $resourcesProperty.type -replace "^(?<provider>.+?)(?=\/)\/(?<type>.+)$", "`${provider}" | Sort-Object -Unique
+    $selectedResourceProviderNames = Show-CheckListForm -items $resourceProviderNames -formText "リソースプロバイダーの選択"
+    $resourceTypeNames = $resourcesProperty.type | Where-Object { $selectedResourceProviderNames -contains ($_ -replace "^(?<provider>.+?)(?=\/)\/(?<type>.+)$", "`${provider}") } | Sort-Object
+    $selectedResourceTypeNames = Show-CheckListForm -items $resourceTypeNames -formText "リソースタイプの選択"
+    return @($resourcesProperty | Where-Object { $selectedResourceTypeNames -contains $_.type })
+}
+
+<#
+.SYNOPSIS
+    指定されたリストをチェックボックス形式で表示し、選択された項目を返却する。
+.DESCRIPTION
+    Windows Formを用いて、指定されたアイテムをチェックボックス形式で表示します。
+    フォームのタイトルについても、引数で指定してください。
+.NOTES
+    chatgptにて生成
+.PARAMETER items
+    リストの項目
+.PARAMETER formText
+    Windowsフォームのタイトル
+.OUTPUTS
+    string[]: Show-CheckListFormはユーザーが選択した項目のみを返却します。
+.EXAMPLE
+    Show-CheckListForm -items $item -formText $formText
+#>
 function Show-CheckListForm {
     param (
         [string[]]$items, # リストの項目
@@ -163,102 +239,121 @@ function Show-CheckListForm {
     # 選択された項目を返す
     return $script:selectedItems
 }
+
+<#
+.SYNOPSIS
+    resourcesProperty変数のvisibleプロパティの値を、実際に取得できたリソースの情報を元に設定します。
+.DESCRIPTION
+    実際のリソースが有しているプロパティの項目からvisibleリストを作成します。
+    同じ種類のリソースだとしても、リソースによって有しているプロパティに差があります。
+    全てのリソースのプロパティを列挙することで、抜け漏れないようにします。
+    リソースが見当たらない場合には、そのリソース種類のvisible作成をスキップします。
+.PARAMETER resourcesProperty
+    コンフィグファイルのresourcesProperty部分の変数
+.PARAMETER resources
+    サブスクリプションに存在するリソースの配列
+.OUTPUTS
+    なし。引数で受け取ったresourcesPropertyの値を直接更新します。
+.EXAMPLE
+    Set-VisibleOfResourcesProperty -resourcesProperty $resourcesProperty -resources $resources
+#>
+function Set-VisibleOfResourcesProperty {
+    param (
+        [System.Collections.ArrayList]$resourcesProperty,
+        [object[]]$resources
+    )
+    foreach($resourceProperty in $resourcesProperty){
+        $resourceIds = ($resources | Where-Object { $_.type -eq $resourceProperty.type }).id
+        if([System.String]::IsNullOrEmpty($resourceIds)){
+            Write-Log -Warn -Message "`$resourceIdsが空です。「$($resourceProperty.type)」のリソースがサブスクリプションに存在しないため、このリソースタイプのvisible作成は断念します。"
+            continue
+        }
+        $dotNotations = [System.Collections.ArrayList]::new()
+        foreach($resourceId in $resourceIds){
+            $detailedResource = Get-ResourceProperty -resourceId $resourceId -apiVersion $resourceProperty.apiVersion
+            $dotNotation = ConvertTo-DotNotation -item $detailedResource -prefix ""
+            $dotNotations.Add($dotNotation) | Out-Null
+        }
+        $visible = @($dotNotations.Keys -replace "(?<=\[)\d+(?=\])","" | Select-Object -Unique)
+        $visible = Optimize-DotNotationKey -item $visible -prefix ""
+        $resourceProperty.visible = $visible
+    }
+}
+
+<#
+.SYNOPSIS
+    dotNotationの一覧を元の順序を維持したまま、不規則な配置を修正します。
+.DESCRIPTION
+    Sort-Objectを用いてしまうと、name,id,type,properties... といった順序を維持することができません。
+    全てのリソースのプロパティをドット表記で一覧化し、それを重複排除するということを前段で実施しています。
+    そのため、一覧化した際の状態に準じてプロパティのドット表記が非整列であるため、これを整列します。
+    1. 指定されたドット記法のプレフィックスを抜き出し、重複排除したものを並び替えの順序として定義します。
+    2. 並び替えの順序に従って（プレフィックスに合致する要素を）要素を整列させます。
+        a. プレフィックスに合致する要素が1つだけの場合は単にそのデータを配置します。
+        b. プレフィックスに合致する要素が複数存在する場合は、それはドット記法が更にネストされていることを示します。
+             再帰処理にてそのネストされた要素の並び替えを行い、それらを配置します。
+    必要に応じてコンフィグファイルを直接開いて順番を修正してください。
+.PARAMETER item
+    並び替え対象のドット記法のキーの配列
+.PARAMETER prefix
+    再帰処理を行う際のプレフィックス文字列
+.OUTPUTS
+    string[]: Optimize-DotNotationKeyは引数の$itemを整列して返します。
+.EXAMPLE
+    Optimize-DotNotationKey -item $item -prefix $prefix
+#>
+function Optimize-DotNotationKey {
+    param (
+        [string[]]$item,
+        [string]$prefix
+    )
+    $output = @()
+    $ordered = $item -replace "\..+$", "" | Select-Object -Unique # ドット記法のプレフィックスを抜き出し、重複を排除
+    foreach($key in $ordered){
+        $matchString = "^{0}(`$|\.)" -f ($key -replace "\[\]","\[\]")
+        $subArray = $item -match $matchString
+        if($subArray.Count -eq 1){
+            # 部分配列の要素が1つの時、それ以上分割する必要はないので値をセット
+            $output += $subArray -replace "^","$prefix"
+        }else{
+            # 部分配列の要素が複数の時、部分配列の各要素から先頭の$keyを削除したものを新たに定義し、それを用いて再帰処理
+            $subArray = $subArray -replace "$($matchString)", ""
+            $output += Optimize-DotNotationKey -item $subArray -prefix "$($prefix)$($key)."
+        }
+    }
+    return $output
+}
 #endregion
 
 #region: Main
 Write-Log -Message "[Info]start main logic"
 
-# Read Config File
+#region: Read Config File
 Write-Log -Message "[Info]start to read the config file"
 $global:config = Get-Content -Path $configFilePath -Encoding utf8 | ConvertFrom-Json -AsHashtable
 Write-Log -Message "[Info]finish to read the config file"
+#endregion
 
-# Get Bearer token and Set headers
+#region: Get Bearer token and Set headers
 Write-Log -Message "[Info]start to get bearer token and set it for headers"
-$parameter = @{
-    Uri    = "https://login.microsoftonline.com/$($global:config.authentication.tenantId)/oauth2/token"
-    Method = "Post"
-    Body   = @{
-        grant_type    = "client_credentials"
-        client_id     = $global:config.authentication.client_id
-        client_secret = $global:config.authentication.client_secret
-        resource      = "https://management.azure.com/"
-    }
-}
-$response = Invoke-RestMethod @parameter
-$global:headers = @{
-    Authorization = "Bearer " + $response.access_token
-    Accept        = "application/json"
-}
+$global:headers = Get-AuthorizationHeader `
+    -tenantId $global:config.authentication.tenantId `
+    -clientId $global:config.authentication.clientId `
+    -clientSecret $global:config.authentication.clientSecret
 Write-Log -Message "[Info]finish to get bearer token and set if for headers"
+#endregion
 
-# コンフィグファイルの作成(修正)
+#region: new(edit) config file
 Write-Log -Message "[Info]start to new(edit) config file"
-# リソースプロバイダーの Getリクエスト
-$parameter = @{
-    Uri         = "https://management.azure.com/subscriptions/$($global:config.subscriptionId)/providers?api-version=2021-04-01"
-    Method      = "Get"
-    Headers     = $global:headers
-    ContentType = "application/json;charset=utf-8"
-}
-$response = Invoke-RestMethod @parameter
-
-# 登録済みのリソースプロバイダーのみを対象とする
-$registeredResourceProviderObjects = $response.value | Where-Object { $_.registrationState -eq "Registered" }
-
-# 取り扱いやすいようにデータを加工する
-$resourceProperties = [ordered]@{resourceProperties = [System.Collections.ArrayList]::new() }
-foreach ($registeredResourceProviderObject in $registeredResourceProviderObjects) {
-    $resourceProviderName = $registeredResourceProviderObject.namespace
-    foreach ($resourceType in $registeredResourceProviderObject.resourceTypes) {
-        $resourceTypeName = $resourceType.resourceType
-        # リソースタイプのapiVersionsがnullの場合はスキップする
-        if ([System.String]::IsNullOrEmpty($resourceType.apiVersions)) { continue }
-        $resourceProperty = [ordered]@{
-            type       = "{0}/{1}" -f $resourceProviderName, $resourceTypeName
-            apiVersion = ($resourceType.apiVersions | Sort-Object -Descending)[0]
-            visible    = [System.Collections.ArrayList]::new()
-        }
-        $resourceProperties.resourceProperties.Add($resourceProperty) | Out-Null
-    }
-}
-
-# Windowsフォームを使って、対象とするリソースプロバイダー、リソースタイプをユーザーに選択させる
-$resourceProviderNames = $resourceProperties.resourceProperties.type -replace "^(?<provider>.+?)(?=\/)\/(?<type>.+)$", "`${provider}" | Sort-Object -Unique
-$checkedResourceProviderNames = Show-CheckListForm -items $resourceProviderNames -formText "リソースプロバイダーの選択"
-$resourceTypeNames = $resourceProperties.resourceProperties.type | Where-Object { $checkedResourceProviderNames -contains ($_ -replace "^(?<provider>.+?)(?=\/)\/(?<type>.+)$", "`${provider}") } | Sort-Object
-$checkedResourceTypeNames = Show-CheckListForm -items $resourceTypeNames -formText "リソースタイプの選択"
-$checkedResourceProperties = $resourceProperties.resourceProperties | Where-Object { $checkedResourceTypeNames -contains $_.type }
-
-# 対象のリソースタイプのリソースをAzure環境から取得し、ドットプロパティを作成する
-## 対象のリソースタイプのIDを取得する
-$uriFilterString = "&`$filter=resourceType eq '{0}'" -f ($checkedResourceProperties.type -join "' or resourceType eq '")
-$parameter = @{
-    Uri         = "https://management.azure.com/subscriptions/$($global:config.subscriptionId)/resources?api-version=2021-04-01$uriFilterString"
-    Method      = "Get"
-    Headers     = $global:headers
-    ContentType = "application/json;charset=utf-8"
-}
-$response = Invoke-RestMethod @parameter
-foreach ($checkedResourceProperty in $checkedResourceProperties) {
-    $sampleResource = $response.value | Where-Object { $_.type -eq $checkedResourceProperty.type } | Select-Object -First 1
-    if ([System.String]::IsNullOrEmpty($sampleResource)) {
-        Write-Log -Warn -Message "`$samplreResourceが空です。「$($checkedResourceProperty.type)」のリソースがサブスクリプションに存在しないため、このリソース種類のvisible作成は断念します"
-        continue
-    }
-    $parameter = @{
-        Uri         = "https://management.azure.com{0}?api-version={1}" -f $sampleResource.id, $checkedResourceProperty.apiVersion
-        Method      = "Get"
-        Headers     = $global:headers
-        ContentType = "application/json;charset=utf-8"
-    }
-    $getResourceResponse = Invoke-RestMethod @parameter
-    $dotProperty = ConvertTo-DotProperty -item $getResourceResponse -prefix "" # ドットプロパティへ変換
-    $keyOfDotProperty = $dotProperty -replace "^(?<key>[^:]+)(?=:):(?<value>.+)$", "`${key}" # ドットプロパティからキーだけ取り出す
-    $keyOfDotProperty = $keyOfDotProperty -replace "(?<=\[)\d+(?=\])", "" | Select-Object -Unique # さらに配列のインデックスを削除して重複排除する
-    $checkedResourceProperty.visible = $keyOfDotProperty
-}
-## Configファイルの該当箇所を更新して処理終了
-$global:config.resourceProperties = $checkedResourceProperties
+$resourceProviders = Get-ResourceProvider -subscriptionId $global:config.subscriptionId | Where-Object { $_.registrationState -eq "Registered" }
+$resourcesProperty = @(Initialize-ResourcesProperty -resourceProviders $resourceProviders) # 登録済みのリソースプロバイダの情報でまずは初期化する
+$resourcesProperty = @(Edit-ResourcesProperty -resourcesProperty $resourcesProperty) # WindowsFormで必要なリソースプロバイダー/リソースタイプを選択させる
+$resources = Get-Resources -subscriptionId $global:config.subscriptionId -resourceType @($resourcesProperty.type)
+Set-VisibleOfResourcesProperty -resourcesProperty $resourcesProperty -resources $resources
+$global:config.resourcesProperty = $resourcesProperty
 $global:config | ConvertTo-Json -Depth 100 | Out-File -FilePath $configFilePath -Force -Encoding utf8
 Write-Log -Message "[Info]finish to to new(edit) config file"
+#endregion
+
+Write-Log -Message "[Info]finish to main logic"
+#endregion

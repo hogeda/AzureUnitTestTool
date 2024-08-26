@@ -31,7 +31,7 @@ Microsoft EntraIDに対するアプリケーション管理者、サブスクリ
 Connect-AzAccount -Tenant <TENANTID> -Subscription <SUBSCRIPTIONID>
 # サービスプリンシパル作成/サブスクリプションに対するReader(閲覧者)ロールの割り当て
 $sp = New-AzADServicePrincipal -DisplayName AzureUnitTestTool -Role Reader -Scope /subscriptions/<SUBSCRIPTIONID>
-Write-Output ("client_id: {0}`nclient_secret: {1}" -f $sp.AppId, $sp.PasswordCredentials.SecretText)
+Write-Output ("clientId: {0}`nclientSecret: {1}" -f $sp.AppId, $sp.PasswordCredentials.SecretText)
 ```
 
 ## 外部設定値の作成

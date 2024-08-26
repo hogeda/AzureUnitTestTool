@@ -1,9 +1,9 @@
 {
   "authentication": {
     "tenantId": "00000000-0000-0000-0000-000000000000",
-    "client_id": "00000000-0000-0000-0000-000000000000",
-    "client_secret": "secret"
+    "clientId": "00000000-0000-0000-0000-000000000000",
+    "clientSecret": "secret"
   },
   "subscriptionId": "00000000-0000-0000-0000-000000000000",
-  "resourceProperties": {}
+  "resourcesProperty": []
 }
