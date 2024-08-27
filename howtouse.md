@@ -34,7 +34,7 @@ $sp = New-AzADServicePrincipal -DisplayName AzureUnitTestTool -Role Reader -Scop
 Write-Output ("clientId: {0}`nclientSecret: {1}" -f $sp.AppId, $sp.PasswordCredentials.SecretText)
 ```
 
-## 外部設定値の作成
+## コンフィグファイルの作成
 
 ### 下準備
 
@@ -46,7 +46,7 @@ configフォルダ配下の「GetAzureResourceDotProperty.config.json」ファ�
 - authentication.client_secret
 - subscriptionId
 
-### コンフィグファイル編集スクリプトの実行
+### コンフィグファイル作成の補助ツールの実行
 
 configフォルダ配下の「EditResourcePropertiesOfConfigFile.ps1」ファイルを実行します。
 
@@ -58,18 +58,21 @@ configフォルダ配下の「EditResourcePropertiesOfConfigFile.ps1」ファイ
 
 ![Select Resource Type](etc/howto2.png)
 
-- 選択したリソースタイプの名前、それが提供する最新のAPIバージョン、それからサブスクリプション上に存在するリソースからドットプロパティのキーを抽出し、コンフィグファイルの「resourceProperties」を更新します。
+- 選択したリソースタイプの名前、それが提供する最新のAPIバージョン、それからサブスクリプション上に存在するリソースからドット記法のキーを抽出し、コンフィグファイルの「resourceProperties」を更新します。
 
 - スクリプトの実行が終了したら、コンフィグファイルを開き(config\GetAzureResourceDotProperty.config.json)、apiVersionやvisibleを適切に修正してください。
 
-- visibleについてはコメントアウト(//)をサポートしています。
-
 ## ツールの実行
 
-ツールを実行することで、サブスクリプション上に存在するリソースの中から、コンフィグファイルに記載されているリソース種類のリソースプロパティをドットプロパティ形式で抽出し、CSVファイルとしてエクスポートします。
+ツールを実行することで、サブスクリプション上に存在するリソースの中から、コンフィグファイルに記載されているリソース種類のリソースプロパティをドット記法で抽出します。
 ツールを実行するには、ルート直下の「GetAzureResourceDotProperty.ps1」を実行します。
+ツールが正常に実行完了すると、「.\output\」配下にツール実行時のタイムスタンプが付与されたフォルダが生成され、その下に以下3つのファイルが作成されます。
+- dotNotation.csv
+- resourceId.csv
+- resourceType.csv
 
-## 単体試験データの準備
+## 単体試験の開始
 
-ルート直下にある「Azure単体試験データフォーマット.xltx」より、新規ファイルを作成してください。
-ツールの実行で得たCSVファイルをExcelに読み込み、関数を適切に修正します。
+出力されたcsvファイルを元に単体試験を実施してください。
+サンプルとして「Azure単体試験テンプレート.xlsx」というExcelファイルを用意しています。
+このファイルの使い方はExcel内に記載しています。

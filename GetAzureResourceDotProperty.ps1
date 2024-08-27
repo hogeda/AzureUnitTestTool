@@ -87,6 +87,7 @@ foreach ($dotNotation in $dotNotations) {
 foreach($resourceType in @($dotNotations.type | Select-Object -Unique)){
     $visible = ($global:config.resourcesProperty | Where-Object { $_.type -eq $resourceType}).visible
     $allKeys = ($dotNotations | Where-Object { $_.type -eq $resourceType}).Keys | Select-Object -Unique
+    $allKeys = Optimize-DotNotationKey -item $allKeys -prefix ""
     $visibleKeys = $allKeys | Where-Object { Compare-DotNotation -visible $visible -dotNotationKey $_}
     $visibleKeys `
     | Select-Object @{Name="ResourceType";Expression={$resourceType}},@{Name="DotNotation";Expression={$_}} `

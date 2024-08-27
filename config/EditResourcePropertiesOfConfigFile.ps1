@@ -35,7 +35,7 @@ function Initialize-ResourcesProperty {
             if ([System.String]::IsNullOrEmpty($resourceType.apiVersions)) { continue }
             $resourceProperty = [ordered]@{
                 type       = "{0}/{1}" -f $resourceProviderName, $resourceTypeName
-                apiVersion = ($resourceType.apiVersions | Sort-Object -Descending)[0]
+                apiVersion = @($resourceType.apiVersions | Sort-Object -Descending)[0]
                 visible    = [System.Collections.ArrayList]::new()
             }
             $resourcesProperty.Add($resourceProperty) | Out-Null
@@ -262,66 +262,22 @@ function Set-VisibleOfResourcesProperty {
         [System.Collections.ArrayList]$resourcesProperty,
         [object[]]$resources
     )
-    foreach($resourceProperty in $resourcesProperty){
+    foreach ($resourceProperty in $resourcesProperty) {
         $resourceIds = ($resources | Where-Object { $_.type -eq $resourceProperty.type }).id
-        if([System.String]::IsNullOrEmpty($resourceIds)){
+        if ([System.String]::IsNullOrEmpty($resourceIds)) {
             Write-Log -Warn -Message "`$resourceIdsが空です。「$($resourceProperty.type)」のリソースがサブスクリプションに存在しないため、このリソースタイプのvisible作成は断念します。"
             continue
         }
         $dotNotations = [System.Collections.ArrayList]::new()
-        foreach($resourceId in $resourceIds){
+        foreach ($resourceId in $resourceIds) {
             $detailedResource = Get-ResourceProperty -resourceId $resourceId -apiVersion $resourceProperty.apiVersion
             $dotNotation = ConvertTo-DotNotation -item $detailedResource -prefix ""
             $dotNotations.Add($dotNotation) | Out-Null
         }
-        $visible = @($dotNotations.Keys -replace "(?<=\[)\d+(?=\])","" | Select-Object -Unique)
+        $visible = @($dotNotations.Keys -replace "(?<=\[)\d+(?=\])", "" | Select-Object -Unique)
         $visible = Optimize-DotNotationKey -item $visible -prefix ""
         $resourceProperty.visible = $visible
     }
-}
-
-<#
-.SYNOPSIS
-    dotNotationの一覧を元の順序を維持したまま、不規則な配置を修正します。
-.DESCRIPTION
-    Sort-Objectを用いてしまうと、name,id,type,properties... といった順序を維持することができません。
-    全てのリソースのプロパティをドット表記で一覧化し、それを重複排除するということを前段で実施しています。
-    そのため、一覧化した際の状態に準じてプロパティのドット表記が非整列であるため、これを整列します。
-    1. 指定されたドット記法のプレフィックスを抜き出し、重複排除したものを並び替えの順序として定義します。
-    2. 並び替えの順序に従って（プレフィックスに合致する要素を）要素を整列させます。
-        a. プレフィックスに合致する要素が1つだけの場合は単にそのデータを配置します。
-        b. プレフィックスに合致する要素が複数存在する場合は、それはドット記法が更にネストされていることを示します。
-             再帰処理にてそのネストされた要素の並び替えを行い、それらを配置します。
-    必要に応じてコンフィグファイルを直接開いて順番を修正してください。
-.PARAMETER item
-    並び替え対象のドット記法のキーの配列
-.PARAMETER prefix
-    再帰処理を行う際のプレフィックス文字列
-.OUTPUTS
-    string[]: Optimize-DotNotationKeyは引数の$itemを整列して返します。
-.EXAMPLE
-    Optimize-DotNotationKey -item $item -prefix $prefix
-#>
-function Optimize-DotNotationKey {
-    param (
-        [string[]]$item,
-        [string]$prefix
-    )
-    $output = @()
-    $ordered = $item -replace "\..+$", "" | Select-Object -Unique # ドット記法のプレフィックスを抜き出し、重複を排除
-    foreach($key in $ordered){
-        $matchString = "^{0}(`$|\.)" -f ($key -replace "\[\]","\[\]")
-        $subArray = $item -match $matchString
-        if($subArray.Count -eq 1){
-            # 部分配列の要素が1つの時、それ以上分割する必要はないので値をセット
-            $output += $subArray -replace "^","$prefix"
-        }else{
-            # 部分配列の要素が複数の時、部分配列の各要素から先頭の$keyを削除したものを新たに定義し、それを用いて再帰処理
-            $subArray = $subArray -replace "$($matchString)", ""
-            $output += Optimize-DotNotationKey -item $subArray -prefix "$($prefix)$($key)."
-        }
-    }
-    return $output
 }
 #endregion
 
