@@ -23,6 +23,9 @@ ExcelではJSONを取り扱いづらいので、リソースの情報はJSON構�
 例えばProvisioningStateやTimeCreationなどです。
 不要なデータは予めフィルターすることで処理時間の短縮につながるため、フィルター機能を付けています。
 
+ツールの概要図を以下に示します。
+![OverView](etc/readme1.png)
+
 ## 前提条件
 
 - ツールによるAzureへの接続にはサービスプリンシパルを用います
@@ -60,4 +63,4 @@ JSONの構造を以下に示します。
 | subscriptionId               | サブスクリプションID                  |
 | resourcesProperty.type       | リソースタイプ                        |
 | resourcesProperty.apiVersion | プロパティ取得に用いるAPIのバージョン |
-| visible                      | 結果を出力する際のプロパティの一覧    |
+| resourcesProperty.visible    | 結果を出力する際のプロパティの一覧    |
