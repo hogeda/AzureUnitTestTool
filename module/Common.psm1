@@ -171,11 +171,7 @@ function ConvertTo-DotNotation {
         foreach ($property in $item.PSObject.Properties) {
             # $prefixの値を元にドット表記の文字列を生成
             $propertyName = [System.String]::IsNullOrEmpty($prefix) ? $property.Name : "$prefix.$($property.Name)"
-            if ([System.String]::IsNullOrEmpty($property.Value)) {
-                # Propertyの値がNullまたは空の場合はスキップする
-                continue    
-            }
-            elseif ($property.Value -is [System.Management.Automation.PSObject]) {
+            if ($property.Value -is [System.Management.Automation.PSObject]) {
                 # Propertyの値がオブジェクトの場合、再帰呼び出し
                 $recursion = ConvertTo-DotNotation -item $property.Value -prefix $propertyName
                 foreach ($key in $recursion.Keys) {
@@ -190,6 +186,10 @@ function ConvertTo-DotNotation {
                         $output.Add($key, $recursion.$key)
                     }
                 }
+            }
+            elseif ([System.String]::IsNullOrEmpty($property.Value)) {
+                # Propertyの値がNullまたは空の場合はスキップする
+                continue
             }
             elseif ($property.Value -is [System.Boolean]) {
                 # Propertyの値が論理の場合、戻り値の変数に値をセット
