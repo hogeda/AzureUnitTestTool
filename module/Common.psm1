@@ -132,72 +132,124 @@ function Compare-DotNotation {
 
 <#
 .SYNOPSIS
-    オブジェクトのプロパティをドット記法で返却します。
+    JSON文字列またはPowershellオブジェクトをドット記法(順序付きディクショナリ)に変換します。
 .DESCRIPTION
-    オブジェクトのプロパティの値がオブジェクトまたは配列である場合、再帰処理を用います。
-    値が数字や文字列、論理値である場合は、ドット記法のプロパティをKey、その値をValueとして、
-    返却用のOrderedDictionaryに要素を追加します。
-.PARAMETER item
-    ドット記法への変換を実施するオブジェクト
+    JSON文字列を指定する場合はstring型である必要があります。JSONファイルをGet-Contentする際には、-Rawスイッチを利用してください。
+    Powershellオブジェクトを指定する場合は特に指定はありません。JSONファイルをGet-Contentする際には、パイプラインでConvertFrom-Jsonを利用してください。
+    $prefixパラメータは再帰処理のために用いますが、これに文字列を指定して実行することで、ドット記法のプロパティ名に任意のプレフィックスを付与することが可能です。
+    出力結果からnullまたは空白文字列を除外したい場合には、-ignoreNullOrEmptyスイッチを利用してください。
+.PARAMETER json
+    string: 必須(inputObjectでも可)、JSON文字列を指定します
+.PARAMETER inputObject
+    object: 必須(jsonでも可)、オブジェクトを指定します
 .PARAMETER prefix
-    ドット記法する際のプレフィックス
+    string: 任意、ドット記法プロパティにプレフィックスを指定します
+.PARAMETER ignoreNullorEmpty
+    switch: 任意、解析時にnull値を除外します
 .OUTPUTS
-    OrderedDictionary: ConvertTo-DotNotationはドット記法のプロパティ名をKeyに、その値をValueにセットしたコレクションを返却します
+    System.Collections.Specialized.OrderedDictionary
 .EXAMPLE
-    ConvertTo-DotNotation -item $item -prefix $prefix
+    ConvertTo-DotNotation -json $json [-prefix $prefix] [-ignoreNullOrEmpty]
+    ConvertTo-DotNotation -inputObject $jsonObj [-prefix $prefix] [-ignoreNullOrEmpty]
 #>
 function ConvertTo-DotNotation {
-    # 関数のパラメータ
+    [CmdletBinding()]
     param (
-        [object] $item,
-        [string] $prefix
+        [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = "ByJsonString")]
+        [string]$json,
+
+        [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = "ByObject")]
+        [object]$inputObject,
+
+        [Parameter()]
+        [string]$prefix = "",
+
+        [Parameter()]
+        [switch]$ignoreNullorEmpty
     )
-    # 戻り値の動的配列を宣言
-    $output = [ordered]::new()    
-    if (
-        $item -is [string] -or 
-        $item -is [int] -or 
-        $item -is [long] -or 
-        $item -is [float] -or 
-        $item -is [double] -or 
-        $item -is [decimal]
-    ) {
-        # $itemが文字列または数字であれば、戻り値の変数に値をセット
-        $propertyName = $prefix
-        $output.Add($propertyName, $item)
+
+    # 初期化
+    if ($json) {
+        $item = $json | ConvertFrom-Json
     }
     else {
-        # $itemが文字列または数字でなければ、$itemが有するPropertyの種類に応じて処理を分ける
+        $item = $inputObject
+    }
+    $output = [ordered]::new()
+
+    # メイン処理
+    if (
+        $item -is [char] -or $item -is [string] -or 
+        $item -is [short] -or $item -is [int] -or $item -is [long] -or $item -is [bigint] -or
+        $item -is [byte] -or $item -is [sbyte] -or
+        $item -is [ushort] -or $item -is [uint] -or $item -is [ulong] -or 
+        $item -is [single] -or $item -is [double] -or
+        $item -is [decimal] -or
+        $item -is [bool]
+    ) {
+        # $itemがkey,value形式でなく値(文字列、数字、論理値)の場合
+        $propertyName = $prefix
+        if ($item -is [bool]) {
+            # 論理値の場合は小文字にする
+            $output.Add($propertyName, $item.ToString().ToLower())
+        }
+        else {
+            $output.Add($propertyName, $item)
+        }
+    }
+    elseif ([System.String]::IsNullOrEmpty($item) -and !$ignoreNullorEmpty) {
+        # $itemがnullの場合
+        $propertyName = $prefix
+        $output.Add($propertyName, $null)
+    }
+    else {
+        # $itemがkey,value形式であるなら、$itemが有するPropertyの種類に応じて処理を分ける
         foreach ($property in $item.PSObject.Properties) {
             # $prefixの値を元にドット表記の文字列を生成
-            $propertyName = [System.String]::IsNullOrEmpty($prefix) ? $property.Name : "$prefix.$($property.Name)"
+            if ([System.String]::IsNullOrEmpty($prefix)) {
+                $propertyName = $property.Name
+            }
+            else {
+                $propertyName = "$prefix.$($property.Name)"
+            }
+
             if ($property.Value -is [System.Management.Automation.PSObject]) {
-                # Propertyの値がオブジェクトの場合、再帰呼び出し
-                $recursion = ConvertTo-DotNotation -item $property.Value -prefix $propertyName
+                # オブジェクトの場合、再帰呼び出し
+                $recursion = ConvertTo-DotNotation -inputObject $property.Value -prefix $propertyName -ignoreNullorEmpty:$ignoreNullorEmpty
                 foreach ($key in $recursion.Keys) {
                     $output.Add($key, $recursion.$key)
                 }
             }
             elseif ($property.Value -is [System.Array]) {
-                # Propertyの値が配列の場合、再帰呼び出し
+                # 配列の場合、再帰呼び出し
                 for ($i = 0; $i -lt $property.Value.Count; $i++) {
-                    $recursion = ConvertTo-DotNotation -item $property.Value[$i] -prefix "$propertyName[$i]"
+                    $recursion = ConvertTo-DotNotation -inputObject $property.Value[$i] -prefix "$propertyName[$i]" -ignoreNullorEmpty:$ignoreNullorEmpty
                     foreach ($key in $recursion.Keys) {
                         $output.Add($key, $recursion.$key)
                     }
                 }
             }
-            elseif ([System.String]::IsNullOrEmpty($property.Value)) {
-                # Propertyの値がNullまたは空の場合はスキップする
-                continue
+            elseif ($property.Value -is [char] -or $property.Value -is [string]) {
+                # 文字列の場合、再帰なし
+                if ([System.String]::IsNullOrEmpty($property.Value) -and !$ignoreNullorEmpty) { continue }
+                $output.Add($propertyName, $property.Value)
             }
-            elseif ($property.Value -is [System.Boolean]) {
-                # Propertyの値が論理の場合、戻り値の変数に値をセット
+            elseif (
+                $property.Value -is [short] -or $property.Value -is [int] -or $property.Value -is [long] -or $property.Value -is [bigint] -or
+                $property.Value -is [byte] -or $property.Value -is [sbyte] -or
+                $property.Value -is [ushort] -or $property.Value -is [uint] -or $property.Value -is [ulong] -or 
+                $property.Value -is [single] -or $property.Value -is [double] -or
+                $property.Value -is [decimal]
+            ) {
+                # 数字の場合、再帰無し
+                $output.Add($propertyName, $property.Value)
+            }
+            elseif ($property.Value -is [bool]) {
+                # 論理値の場合、再帰無し
                 $output.Add($propertyName, $property.Value.ToString().ToLower())
             }
-            else {
-                # 上記のいずれにも合致しない(文字列/数字）場合、戻り値の変数に値をセット
-                $output.Add($propertyName, $property.Value)
+            elseif ([System.String]::IsNullOrEmpty($property.Value) -and !$ignoreNullorEmpty ) {
+                $output.Add($propertyName, $null)
             }
         }
     }
