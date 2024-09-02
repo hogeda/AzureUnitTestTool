@@ -258,7 +258,7 @@ function ConvertTo-DotNotation {
                 }
                 elseif ($property.Value -is [char] -or $property.Value -is [string]) {
                     # 文字列の場合、再帰なし
-                    if ([System.String]::IsNullOrEmpty($property.Value) -and !$ignoreNullorEmpty) { continue }
+                    if ([System.String]::IsNullOrEmpty($property.Value) -and $ignoreNullorEmpty) { continue }
                     $output.Add($propertyName, $property.Value)
                 }
                 elseif (
@@ -280,8 +280,10 @@ function ConvertTo-DotNotation {
                     $utcDatetime = $property.Value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffffK") -replace "Z$", "+00:00"
                     $output.Add($propertyName, $utcDatetime)
                 }
-                elseif ([System.String]::IsNullOrEmpty($property.Value) -and !$ignoreNullorEmpty ) {
-                    $output.Add($propertyName, $null)
+                elseif ([System.String]::IsNullOrEmpty($property.Value)) {
+                    if (!$ignoreNullorEmpty) {
+                        $output.Add($propertyName, $null)
+                    }
                 }
                 else {
                     Write-Host ("[Warning] propertyName:{0}, propertyValue:{1}をドット記法に変換できませんでした." -f $propertyName, $property.Value)
