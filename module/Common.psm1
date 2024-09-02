@@ -158,7 +158,7 @@ function ConvertTo-DotNotation {
         [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = "ByJsonString")]
         [string]$json,
 
-        [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = "ByObject")]
+        [Parameter(Mandatory, ParameterSetName = "ByObject")]
         [object]$inputObject,
 
         [Parameter()]
