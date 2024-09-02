@@ -47,7 +47,7 @@ Write-Log -Message "[Info]finish to get resource property"
 Write-Log -Message "[Info]start to convert ARM into dot notation"
 $dotNotations = [System.Collections.ArrayList]::new()
 foreach ($resourceProperty in $resourcesProperty) {
-    $dotNotation = ConvertTo-DotNotation -inputObject $resourceProperty -prefix ""
+    $dotNotation = ConvertTo-DotNotation -inputObject $resourceProperty -prefix "" -returnAsOrderedDictionary
     $dotNotations.Add($dotNotation) | Out-Null
 }
 Write-Log -Message "[Info]finish to convert ARM into dot notation"
