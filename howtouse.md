@@ -2,16 +2,16 @@
 
 ## 注意事項
 
-- PowershellスクリプトはUTF8で保存しています。文字化けするときは一度メモ帳で開きコピーして、続いてPowershell_ISEで開いて貼り付けてください。
-- Powershellスクリプトで3項演算子を用いているため、Powershellバージョン 7.0 以上で動作します。お使いのPowershellのバージョンを確認するには、Powershellで$PSVersionTableと実行します。
+- PowershellスクリプトはUTF8で保存しています。文字化けするときはSJISで保存してみてください。
+- Powershellバージョン 7.0 以上で動作します。お使いのPowershellのバージョンを確認するには、Powershellで$PSVersionTableと実行します。
 
 ```Powershell
 $PSVersionTable
 # Name                           Value
 # ----                           -----
-# PSVersion                      7.4.4
+# PSVersion                      7.4.5
 # PSEdition                      Core
-# GitCommitId                    7.4.4
+# GitCommitId                    7.4.5
 # OS                             Microsoft Windows 10.0.19045
 # Platform                       Win32NT
 # PSCompatibleVersions           {1.0, 2.0, 3.0, 4.0…}
@@ -45,6 +45,9 @@ configフォルダ配下の「GetAzureResourceDotProperty.config.json」ファ�
 - authentication.client_id
 - authentication.client_secret
 - subscriptionId
+
+以下の黄色で塗りつぶした箇所を更新します。
+![Select Resource Providers](etc/howto3.png)
 
 ### コンフィグファイル作成の補助ツールの実行
 

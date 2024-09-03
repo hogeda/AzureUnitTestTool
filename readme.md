@@ -31,8 +31,7 @@ ExcelではJSONを取り扱いづらいので、リソースの情報はJSON構�
 - ツールによるAzureへの接続にはサービスプリンシパルを用います
 - サービスプリンシパルの認証方式はシークレットにのみ対応します
   ※証明書認証方式はBearerトークンを取得するための、REST本文の作成が難解で断念しました
-- Powershellスクリプトの中で三項演算子を用いていますが、これはPSVersion 7.0以降でのみ有効です
-  Powershell 7.0以降でしか動作しないので、必要に応じてバージョンアップしてください
+- Powershellのバージョンは7.0以上で動作します。必要に応じて以下からダウンロードしてください。[download](https://learn.microsoft.com/ja-jp/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.4)
 
 ## ドット記法のフィルタ機能について
 

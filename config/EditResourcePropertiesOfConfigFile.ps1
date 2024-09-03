@@ -281,6 +281,12 @@ function Set-VisibleOfResourcesProperty {
 }
 #endregion
 
+#region: Check PSVersion
+if($PSVersionTable.PSVersion.Major -lt 7){
+    Write-Log -Err -Message ("""This script requires Powershell version 7 or higher. Your PSVersion is {0}""" -f $PSVersionTable.PSVersion.ToString())
+}
+#endregion
+
 #region: Main
 Write-Log -Message "[Info]start main logic"
 
