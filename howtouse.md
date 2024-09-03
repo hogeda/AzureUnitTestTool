@@ -47,6 +47,7 @@ configフォルダ配下の「GetAzureResourceDotProperty.config.json」ファ�
 - subscriptionId
 
 以下の黄色で塗りつぶした箇所を更新します。
+
 ![Select Resource Providers](etc/howto3.png)
 
 ### コンフィグファイル作成の補助ツールの実行
