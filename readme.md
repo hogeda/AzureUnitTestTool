@@ -19,6 +19,8 @@ ExcelではJSONを取り扱いづらいので、リソースの情報はJSON構�
 それをExcelで読み込み、リソースIDとドット記法の組み合わせをキーとしてデータを探索することで、
 目的のプロパティの値を簡単に取得することを実現します。
 
+![sample](https://raw.github.com/wiki/hogeda/AzureUnitTestTool/images/output.gif)
+
 またリソースのプロパティを取得した際に、パラメータシートで定義していない項目がたくさん取れるかと思います。
 例えばProvisioningStateやTimeCreationなどです。
 不要なデータは予めフィルターすることで処理時間の短縮につながるため、フィルター機能を付けています。
