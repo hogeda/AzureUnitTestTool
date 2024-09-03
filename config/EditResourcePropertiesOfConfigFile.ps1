@@ -271,7 +271,7 @@ function Set-VisibleOfResourcesProperty {
         $dotNotations = [System.Collections.ArrayList]::new()
         foreach ($resourceId in $resourceIds) {
             $detailedResource = Get-ResourceProperty -resourceId $resourceId -apiVersion $resourceProperty.apiVersion
-            $dotNotation = ConvertTo-DotNotation -inputObject $detailedResource -prefix ""
+            $dotNotation = ConvertTo-DotNotation -inputObject $detailedResource -prefix "" -returnAsOrderedDictionary
             $dotNotations.Add($dotNotation) | Out-Null
         }
         $visible = @($dotNotations.Keys -replace "(?<=\[)\d+(?=\])", "" | Select-Object -Unique)
